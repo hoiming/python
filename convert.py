@@ -20,18 +20,18 @@ def process(filePath,charset):
     with open(filePath,'r') as f:
         lines = f.readlines()
         for line in lines:
-            s = line.decode(charset)
-            s = s.encode('UTF-8')
-            newlines.append(s)
+	    try:
+                s = line.decode(charset)
+		except UnicodeError:
+		    print "Source file's encoding is not %s." % charset
+		    continue
+           	s = s.encode('UTF-8')
+             newlines.append(s)
 
+    #write to ouput file
     with open(filePath,'w+') as f:
         f.writelines(newlines)
-execeptions  = [".\src\com\haiming\concurrencyy\ToastOMatic.java",
-                ".\src\com\haiming\enumtype\ChineseYuan.java",
-                ".\src\com\haiming\enumtype\Yuan.java"]
 for f in lst:
     print f
-    if f  in execeptions:
-        continue
     process(f,"GBK")
 
