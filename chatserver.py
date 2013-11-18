@@ -1,76 +1,81 @@
 #coding:utf-8
 import socket, traceback
 import threading
+import Queue
 
+class ChatServer(object):
+    def __init__(self):
+        self.host = 'localhost'
+        self.port = 32345
+        self.que = Queue.Queue()
+        self.sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sk.bind((self.host,self.port))
+        self.sk.listen(10)
+        self.socketlist = []
+        print 'Server is up'
 
-host = 'localhost'
-port = 42345
-condition = threading.Condition()
-data = ''
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((host,port))
-s.listen(10)
-print 'Server is up'
-
-def clientThreadIn(conn):
-    '''
-    从客户端接收数据，更新data
-    '''
-    global data
-    while 1:
-        try:
-            temp = conn.recv(1024)
-            if not temp:
-                conn.close()
-                return
-            NotifyAll(temp)
-            print data
-        except:
-            NotifyAll(conn.getpeername()[0] + ' disconnect')
-            print data
-            return
-
-def NotifyAll(message):
-    '''
-    更新当前的数据，唤醒所有等待的线程
-    '''
-    global data
-    if condition.acquire():
-        data = message
-        condition.notifyAll()
-        condition.release()
-
-def clientThreadOut(conn):
-    '''
-    获得锁，等待数据
-    '''
-    global data
-    while 1:
-        if condition.acquire():
-            condition.wait()
-            if data:
-                try:
-                    conn.sendall(data)
-                    condition.release()
-                except:
-                    condition.release()
-                    return
-
-while 1:
-    try:
+    def clientThreadIn(self,conn):
         '''
-        接收连接，启动线程
+        接收数据
         '''
-        conn,addr = s.accept()
-        print 'Connected with ' + addr[0] + ':' + str(addr[1])
-        NotifyAll(conn.getpeername()[0] + ' is in the room.')
-        print data
-        threading.Thread(target = clientThreadIn, args = (conn,)).start()
-        threading.Thread(target = clientThreadOut, args = (conn, )).start()
+        data = ''
+        while 1:            
+            try:
+                data = conn.recv(1024)
+                if not data:
+                    conn.close()
+                    break
+                self.que.put(data)
+                print data
+            except:
+                traceback.print_exc()
+                data = conn.getpeername()[0] + ' disconnect'
+                self.que.put(data)
+                self.socketlist.remove(conn)
+                
+                print data
+                break
 
-    except:
-        traceback.print_exc()
-        s.close()
-        print 'socket is closed'
+    def clientThreadOut(self):
+        '''
+        发送数据
+        '''
+        #从队列中取出一条消息
+        while 1:
+            try:
+                
+                data = self.que.get()
+                for sk in list(self.socketlist):
+                    sk.sendall(data)
+            except:
+                traceback.print_exc()
+      
+    def run(self):
+
+        #发送消息的线程
+        threading.Thread(target = self.clientThreadOut).start()
+        while 1:
+            try:
+                '''
+                接收连接，启动线程
+                '''
+                conn,addr = self.sk.accept()
+                print 'Connected with ' + addr[0] + ':' + str(addr[1])
+                data = conn.getpeername()[0] + ' is in the room.'
+                self.que.put(data)
+                print data
+                threading.Thread(target = self.clientThreadIn, args = (conn,)).start()
+                self.socketlist.append(conn)
+
+            except:
+                traceback.print_exc()
+                self.sk.close()
+                print 'socket is closed'
+        
+        
+
+if __name__ == '__main__':
+    chatServer = ChatServer()
+    chatServer.run()
 
 
